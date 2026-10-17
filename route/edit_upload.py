@@ -50,8 +50,6 @@ async def edit_upload():
 
                 curs.execute(db_change("select html from html_filter where kind = 'extension'"))
                 extension = [i[0].lower() for i in curs.fetchall()]
-                if re.sub(r'^\.', '', value).lower() == 'svg':
-                    return await re_error(conn, 14)
                 if not re.sub(r'^\.', '', value).lower() in extension:
                     return await re_error(conn, 14)
 

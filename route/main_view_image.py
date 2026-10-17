@@ -10,7 +10,7 @@ async def main_view_image(name = ''):
             mime_type = re.search(r'([^.]+)$', name)
             if mime_type:
                 mime_type = mime_type.group(1).lower()
-                inline_types = {
+                file_types = {
                     'png': 'image/png',
                     'jpg': 'image/jpeg',
                     'jpeg': 'image/jpeg',
@@ -18,10 +18,12 @@ async def main_view_image(name = ''):
                     'webp': 'image/webp',
                     'svg': 'image/svg+xml'
                 }
+                # SVG can carry script. Keep the real type so <img> renders it,
+                # but never render it as a document.
                 response = flask.send_from_directory(
                     './' + load_image_url(conn), name,
-                    mimetype = inline_types.get(mime_type, 'application/octet-stream'),
-                    as_attachment = mime_type not in inline_types
+                    mimetype = file_types.get(mime_type, 'application/octet-stream'),
+                    as_attachment = mime_type == 'svg' or mime_type not in file_types
                 )
                 response.headers['X-Content-Type-Options'] = 'nosniff'
                 response.headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"

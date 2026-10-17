@@ -97,19 +97,25 @@ class UploadSecurityTest(unittest.TestCase):
         self.mocks["captcha_post"].assert_not_awaited()
         self.assertEqual(self.conn.execute("select count(*) from data").fetchone()[0], 0)
 
-    def test_authenticated_svg_is_rejected_even_when_whitelisted(self):
+    def test_authenticated_svg_upload_is_stored(self):
         self.mocks["ip_check"].return_value = "tester"
         self.mocks["ip_or_user"].return_value = 0
-        for filename in ("vector.svg", "vector.SVG"):
+        for filename, stored in (("vector.svg", "stored-hash.svg"),
+                                 ("vector.SVG", "stored-hash.SVG")):
             with self.subTest(filename=filename):
+                (Path(self.image_dir.name) / stored).unlink(missing_ok=True)
+                self.conn.execute("delete from data")
                 response = self.client.post(
                     "/upload", data={"f_data[]": (io.BytesIO(b"<svg/>"), filename)},
                     content_type="multipart/form-data",
                 )
-                self.assertEqual(response.status_code, 400)
-                self.assertEqual(response.get_data(as_text=True), "14")
-        self.assertEqual(list(Path(self.image_dir.name).iterdir()), [])
-        self.assertEqual(self.conn.execute("select count(*) from data").fetchone()[0], 0)
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers["Location"], "/w/file:" + filename)
+                self.assertEqual((Path(self.image_dir.name) / stored).read_bytes(), b"<svg/>")
+                self.assertEqual(
+                    self.conn.execute("select title from data").fetchone()[0],
+                    "file:" + filename,
+                )
 
     def test_authenticated_raster_upload_still_works(self):
         self.mocks["ip_check"].return_value = "tester"
@@ -158,7 +164,7 @@ class ImageResponseSecurityTest(unittest.TestCase):
     def test_inline_images_keep_real_mime_types(self):
         for suffix, mime in (("png", "image/png"), ("jpg", "image/jpeg"),
                              ("jpeg", "image/jpeg"), ("gif", "image/gif"),
-                             ("webp", "image/webp"), ("svg", "image/svg+xml")):
+                             ("webp", "image/webp")):
             with self.subTest(suffix=suffix):
                 (Path(self.image_dir.name) / ("sample." + suffix)).write_bytes(b"image bytes")
                 with self.client.get("/image/sample." + suffix + ".cache_v12") as response:
@@ -167,6 +173,15 @@ class ImageResponseSecurityTest(unittest.TestCase):
                     self.assertNotIn("attachment", response.headers.get("Content-Disposition", ""))
                     self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
                     self.assertIn("sandbox", response.headers.get("Content-Security-Policy", ""))
+
+    def test_svg_keeps_its_type_but_never_renders_as_a_document(self):
+        (Path(self.image_dir.name) / "sample.svg").write_bytes(b"<svg/>")
+        with self.client.get("/image/sample.svg.cache_v12") as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.mimetype, "image/svg+xml")
+            self.assertIn("attachment", response.headers["Content-Disposition"])
+            self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+            self.assertIn("sandbox", response.headers.get("Content-Security-Policy", ""))
 
     def test_other_files_download_as_octet_stream(self):
         for suffix in ("html", "txt"):
