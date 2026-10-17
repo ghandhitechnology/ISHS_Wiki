@@ -2,10 +2,6 @@ from .tool.func import *
 
 async def edit_upload():
     with get_db_connect() as conn:
-        ip = ip_check()
-        if ip_or_user(ip) == 1:
-            return redirect(conn, '/login')
-
         curs = conn.cursor()
 
         if await acl_check('', 'upload') == 1:
@@ -82,6 +78,7 @@ async def edit_upload():
                 else:
                     data.save(os.path.join(data_url_image, e_data))
 
+                ip = ip_check()
                 g_lice = flask.request.form.get('f_lice', '')
                 file_size = os.stat(os.path.join(data_url_image, e_data)).st_size
                 file_size = str(round(file_size / 1000, 1))
