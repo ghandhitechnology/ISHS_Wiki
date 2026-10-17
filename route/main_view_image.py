@@ -10,10 +10,22 @@ async def main_view_image(name = ''):
             mime_type = re.search(r'([^.]+)$', name)
             if mime_type:
                 mime_type = mime_type.group(1).lower()
-                if mime_type == 'svg':
-                    mime_type = 'svg+xml'
-
-                return flask.send_from_directory('./' + load_image_url(conn), name, mimetype = 'image/' + mime_type)
+                inline_types = {
+                    'png': 'image/png',
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'gif': 'image/gif',
+                    'webp': 'image/webp',
+                    'svg': 'image/svg+xml'
+                }
+                response = flask.send_from_directory(
+                    './' + load_image_url(conn), name,
+                    mimetype = inline_types.get(mime_type, 'application/octet-stream'),
+                    as_attachment = mime_type not in inline_types
+                )
+                response.headers['X-Content-Type-Options'] = 'nosniff'
+                response.headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+                return response
             else:
                 return ''
         else:
